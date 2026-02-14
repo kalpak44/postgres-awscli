@@ -1,15 +1,17 @@
 FROM alpine:3.23
 
-RUN apk add --no-cache \
+RUN set -eux; \
+    apk add --no-cache \
       postgresql18-client \
       aws-cli \
       bash \
       ca-certificates \
-      coreutils \
-    && update-ca-certificates
+      coreutils; \
+    update-ca-certificates
 
 WORKDIR /app
-COPY backup.sh /app/backup.sh
-RUN chmod +x /app/backup.sh
 
-ENTRYPOINT ["/app/backup.sh"]
+COPY backup.sh restore.sh entrypoint.sh ./
+RUN chmod +x backup.sh restore.sh entrypoint.sh
+
+ENTRYPOINT ["/app/entrypoint.sh"]
