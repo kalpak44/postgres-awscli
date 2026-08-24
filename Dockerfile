@@ -6,7 +6,7 @@
 # on purpose: an exact `=version` apk pin breaks as soon as Alpine drops the old
 # package, and `postgresql-client` without a number resolves to whichever major the
 # Alpine release ships. Bumping the tag is what moves the tools.
-FROM alpine:3.23
+FROM alpine:3.24
 
 RUN set -eux; \
     apk add --no-cache \
