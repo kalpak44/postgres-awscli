@@ -4,6 +4,13 @@ The newest `## vX.Y.Z` heading below is the version this repository publishes �
 release workflow reads it from this file. Entries are written by the monthly release
 agent (`.github/workflows/release.yml`).
 
+## v0.3.1 — 2026-08-24
+
+| tool | from | to |
+|------|------|----|
+
+Rebuild against current Alpine packages. No pinned version changed.
+
 ## v0.3.0 — 2026-08-24
 
 | tool | from | to |
