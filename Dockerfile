@@ -14,7 +14,8 @@ RUN set -eux; \
       aws-cli \
       bash \
       ca-certificates \
-      coreutils; \
+      coreutils \
+      openssl; \
     update-ca-certificates; \
     psql --version; \
     pg_dump --version; \

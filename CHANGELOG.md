@@ -4,6 +4,33 @@ The newest `## vX.Y.Z` heading below is the version this repository publishes �
 release workflow reads it from this file. Entries are written by the monthly release
 agent (`.github/workflows/release.yml`).
 
+## v0.3.2 — 2026-09-07
+
+Security rebuild. The previous image scanned as 6 Critical and 19 High; this one scans as 2 Critical and 3 High. The release notes list what remains and why.
+
+### Fixed
+
+- **libcrypto3** 3.5.7-r0 — 2 Critical, 7 High: CVE-2026-14456, CVE-2026-14457, CVE-2026-18798, CVE-2026-54874, CVE-2026-63072, CVE-2026-63073, CVE-2026-63075, CVE-2026-63076, CVE-2026-75803
+- **libexpat** 2.8.3-r0 — 2 High: CVE-2026-66046, CVE-2026-76641
+- **libssl3** 3.5.7-r0 — 2 Critical, 7 High: CVE-2026-14456, CVE-2026-14457, CVE-2026-18798, CVE-2026-54874, CVE-2026-63072, CVE-2026-63073, CVE-2026-63075, CVE-2026-63076, CVE-2026-75803
+
+### Contents
+
+| tool | version |
+|------|---------|
+| alpine | 3.24.1 |
+| psql | 18.6 |
+| pg_dump | 18.6 |
+| pg_restore | 18.6 |
+| pg_dumpall | 18.6 |
+| aws-cli | 2.34.63 |
+| bash | 5.3.9 |
+| coreutils | 9.11 |
+| python3 | 3.14.7 |
+| musl | 1.2.6-r2 |
+| openssl | 3.5.8-r0 |
+| ca-certificates | 20260611-r0 |
+
 ## v0.3.1 — 2026-08-24
 
 | tool | from | to |
