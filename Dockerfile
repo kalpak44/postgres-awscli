@@ -6,19 +6,12 @@
 # on purpose: an exact `=version` apk pin breaks as soon as Alpine drops the old
 # package, and `postgresql-client` without a number resolves to whichever major the
 # Alpine release ships. Bumping the tag is what moves the tools.
-#
-# Object storage is reached through the MinIO client, not aws-cli. aws-cli on Alpine
-# is the Python build: it pulls in a Python runtime and about sixty packages, and the
-# image's entire Critical/High surface came from two of them, with no fix Alpine had
-# packaged. mcli is a single static binary and covers the three operations the backup
-# and restore scripts use.
 FROM alpine:3.24
 
 RUN set -eux; \
     apk add --no-cache \
       postgresql-client \
-      minio-client \
-      jq \
+      aws-cli \
       bash \
       ca-certificates \
       coreutils \
@@ -26,8 +19,7 @@ RUN set -eux; \
     update-ca-certificates; \
     psql --version; \
     pg_dump --version; \
-    mcli --version; \
-    jq --version
+    aws --version
 
 WORKDIR /app
 

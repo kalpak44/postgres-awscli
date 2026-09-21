@@ -4,20 +4,6 @@ The newest `## vX.Y.Z` heading below is the version this repository publishes â€
 release workflow reads it from this file. Entries are written by the monthly release
 agent (`.github/workflows/release.yml`).
 
-## vNEXT
-
-Replaced the AWS CLI with the MinIO client (`mcli`) for all S3 access. On Alpine the AWS
-CLI is the Python build: it pulled in a Python runtime and around sixty packages, and
-every Critical and all but one High finding in the image came from two of them, with no
-fixed version Alpine had packaged.
-
-Breaking:
-
-- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are now required. IAM roles are no
-  longer picked up.
-- `S3_SSE` is a switch rather than an algorithm name; any non-empty value enables SSE-S3.
-- New optional `S3_ENDPOINT` points the scripts at any S3-compatible backend.
-
 ## v0.3.2 â€” 2026-09-07
 
 Security rebuild. The previous image scanned as 6 Critical and 19 High; this one scans as 2 Critical and 3 High. The release notes list what remains and why.
