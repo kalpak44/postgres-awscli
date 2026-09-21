@@ -8,6 +8,8 @@ die() { log "ERROR: $*"; exit 1; }
 cleanup() {
   [ -n "${DUMP_FILE-}" ] && [ -f "${DUMP_FILE}" ] && rm -f "${DUMP_FILE}" || true
   [ -n "${LOCAL_FILE-}" ] && [ -f "${LOCAL_FILE}" ] && rm -f "${LOCAL_FILE}" || true
+  # Holds the S3 credentials, so it does not outlive the run.
+  [ -n "${MC_CONFIG_DIR-}" ] && rm -rf "${MC_CONFIG_DIR}" || true
 }
 trap cleanup EXIT INT TERM HUP
 
@@ -18,19 +20,30 @@ require_var() {
 }
 
 # ---- Validate required variables (do NOT rename vars) ----
-required_vars="PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD S3_BUCKET S3_PREFIX AWS_DEFAULT_REGION"
+required_vars="PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD S3_BUCKET S3_PREFIX AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY"
 for var in $required_vars; do
   require_var "$var"
 done
 
 # Optional vars:
 #   RETENTION_COUNT (default 10)
-#   S3_SSE         (default AES256; set to "" to disable)
+#   S3_SSE         (default AES256; set to "" to disable). A switch, not an
+#                  algorithm name: the client takes no algorithm, and AES256 is
+#                  the only value the old flag ever selected.
+#   S3_ENDPOINT    (default https://s3.<AWS_DEFAULT_REGION>.amazonaws.com)
 RETENTION_COUNT="${RETENTION_COUNT-10}"
 S3_SSE="${S3_SSE-AES256}"
 
 # Harden temp file perms
 umask 077
+
+# The object client keeps credentials in a config dir rather than in a host URL: an
+# AWS secret key routinely contains / and +, which a URL cannot carry unencoded.
+export MC_CONFIG_DIR="${MC_CONFIG_DIR-/tmp/.mc}"
+S3_ENDPOINT="${S3_ENDPOINT-https://s3.${AWS_DEFAULT_REGION}.amazonaws.com}"
+
+mcli alias set --quiet s3 "${S3_ENDPOINT}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" >/dev/null \
+  || die "Could not reach ${S3_ENDPOINT}. Check S3_ENDPOINT, AWS_DEFAULT_REGION and the credentials."
 
 TIMESTAMP="$(date -u +"%Y%m%dT%H%M%SZ")"
 FILENAME="${PGDATABASE}_${TIMESTAMP}.sql.gz"
@@ -39,6 +52,7 @@ FILENAME="${PGDATABASE}_${TIMESTAMP}.sql.gz"
 S3_PREFIX_CLEAN="${S3_PREFIX%/}"
 S3_KEY="${S3_PREFIX_CLEAN}/${FILENAME}"
 S3_PATH="s3://${S3_BUCKET}/${S3_KEY}"
+S3_TARGET="s3/${S3_BUCKET}/${S3_PREFIX_CLEAN}/"
 
 # Local paths
 DUMP_FILE="$(mktemp "/tmp/${PGDATABASE}_${TIMESTAMP}.sql.XXXXXX")"
@@ -70,14 +84,14 @@ log "Uploading backup to S3..."
 
 S3_CP_EXTRA_ARGS=""
 if [ -n "${S3_SSE}" ]; then
-  # SSE-S3; safe default for most buckets. Set S3_SSE="" to disable.
-  S3_CP_EXTRA_ARGS="--sse ${S3_SSE}"
+  # SSE-S3 with the bucket's own default key. A backend with no KMS configured
+  # rejects this outright rather than storing the object unencrypted.
+  S3_CP_EXTRA_ARGS="--enc-s3 s3/${S3_BUCKET}/${S3_PREFIX_CLEAN}"
 fi
 
-# Note: --only-show-errors is valid for `aws s3 cp`
-aws s3 cp "${LOCAL_FILE}" "${S3_PATH}" \
-  --only-show-errors \
-  ${S3_CP_EXTRA_ARGS}
+# The transfer summary goes to stdout even under --quiet; errors go to stderr and
+# are left visible.
+mcli cp --quiet ${S3_CP_EXTRA_ARGS} "${LOCAL_FILE}" "${S3_TARGET}" >/dev/null
 
 log "Upload complete."
 
@@ -88,14 +102,13 @@ LOCAL_FILE=""
 
 log "Applying retention policy (keep last ${RETENTION_COUNT} backups)..."
 
-# ---- Retention using s3api + LastModified sort ----
-# Safe even if prefix is empty (Contents is null).
-# NOTE: Don't use --only-show-errors with `aws s3api ...` (it is NOT supported there).
-keys="$(aws s3api list-objects-v2 \
-  --bucket "${S3_BUCKET}" \
-  --prefix "${S3_PREFIX_CLEAN}/" \
-  --query "reverse(sort_by(Contents || \`[]\`, &LastModified))[].Key" \
-  --output text || true)"
+# ---- Retention: newest first, keep RETENTION_COUNT, delete the rest ----
+# An empty prefix lists nothing and exits 0, so this is safe on a first run.
+# `.key` is the object's basename, not its full key, which is why the prefix is
+# put back on before deleting.
+keys="$(mcli ls --json "s3/${S3_BUCKET}/${S3_PREFIX_CLEAN}/" \
+  | jq -r 'select(.type=="file") | [.lastModified, .key] | @tsv' \
+  | sort -r | cut -f2 || true)"
 
 if [ -n "${keys}" ]; then
   count=0
@@ -104,8 +117,8 @@ if [ -n "${keys}" ]; then
     if [ "${count}" -le "${RETENTION_COUNT}" ]; then
       continue
     fi
-    log "Deleting old backup: s3://${S3_BUCKET}/${key}"
-    aws s3api delete-object --bucket "${S3_BUCKET}" --key "${key}"
+    log "Deleting old backup: s3://${S3_BUCKET}/${S3_PREFIX_CLEAN}/${key}"
+    mcli rm --quiet "s3/${S3_BUCKET}/${S3_PREFIX_CLEAN}/${key}" >/dev/null
   done
 else
   log "No existing backups found under prefix; skipping retention."

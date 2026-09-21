@@ -6,6 +6,8 @@ die() { log "ERROR: $*"; exit 1; }
 
 cleanup() {
   [ -n "${TMP_FILE-}" ] && [ -f "${TMP_FILE}" ] && rm -f "${TMP_FILE}" || true
+  # Holds the S3 credentials, so it does not outlive the run.
+  [ -n "${MC_CONFIG_DIR-}" ] && rm -rf "${MC_CONFIG_DIR}" || true
 }
 trap cleanup EXIT INT TERM HUP
 
@@ -16,7 +18,7 @@ require_var() {
 }
 
 # ---- Validate required variables (do NOT rename vars) ----
-required_vars="PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD S3_BUCKET AWS_DEFAULT_REGION RESTORE_S3_KEY"
+required_vars="PGHOST PGPORT PGDATABASE PGUSER PGPASSWORD S3_BUCKET AWS_DEFAULT_REGION AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY RESTORE_S3_KEY"
 for var in $required_vars; do
   require_var "$var"
 done
@@ -24,11 +26,24 @@ done
 # Optional vars:
 #   RECREATE_DB (default false)
 #   ADMIN_DB    (default postgres)
+#   S3_ENDPOINT (default https://s3.<AWS_DEFAULT_REGION>.amazonaws.com)
 RECREATE_DB="${RECREATE_DB-false}"
 ADMIN_DB="${ADMIN_DB-postgres}"
 
 S3_PATH="s3://${S3_BUCKET}/${RESTORE_S3_KEY}"
+S3_SOURCE="s3/${S3_BUCKET}/${RESTORE_S3_KEY}"
 TMP_FILE="/tmp/restore_${PGDATABASE}_$(date -u +"%Y%m%dT%H%M%SZ").sql.gz"
+
+umask 077
+
+# The object client keeps credentials in a config dir rather than in a host URL: an
+# AWS secret key routinely contains / and +, which a URL cannot carry unencoded.
+export MC_CONFIG_DIR="${MC_CONFIG_DIR-/tmp/.mc}"
+S3_ENDPOINT="${S3_ENDPOINT-https://s3.${AWS_DEFAULT_REGION}.amazonaws.com}"
+
+mcli alias set --quiet s3 "${S3_ENDPOINT}" "${AWS_ACCESS_KEY_ID}" "${AWS_SECRET_ACCESS_KEY}" >/dev/null \
+  || die "Could not reach ${S3_ENDPOINT}. Check S3_ENDPOINT, AWS_DEFAULT_REGION and the credentials."
+
 
 psql_admin() {
   PGPASSWORD="${PGPASSWORD}" psql \
@@ -51,7 +66,7 @@ psql_db() {
 }
 
 log "Downloading backup from ${S3_PATH}"
-aws s3 cp "${S3_PATH}" "${TMP_FILE}" --only-show-errors
+mcli cp --quiet "${S3_SOURCE}" "${TMP_FILE}" >/dev/null
 [ -s "${TMP_FILE}" ] || die "Downloaded file is empty: ${TMP_FILE}"
 
 if [ "${RECREATE_DB}" = "true" ]; then

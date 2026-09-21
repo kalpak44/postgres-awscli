@@ -4,7 +4,8 @@ Minimal Docker image containing:
 
 - `pg_dump` (PostgreSQL client)
 - `psql`
-- `aws-cli`
+- `mcli` (MinIO client, for S3)
+- `jq`
 - PostgreSQL → S3 backup support
 - PostgreSQL restore from S3 support
 - Retention policy (keeps last 10 backups by default)
@@ -45,7 +46,10 @@ Image published to:
 | `PGUSER` | Database user |
 | `PGPASSWORD` | Database password |
 | `S3_BUCKET` | S3 bucket name |
-| `AWS_DEFAULT_REGION` | AWS region |
+| `AWS_DEFAULT_REGION` | AWS region — also builds the default S3 endpoint |
+| `AWS_ACCESS_KEY_ID` | S3 access key |
+| `AWS_SECRET_ACCESS_KEY` | S3 secret key |
+| `S3_ENDPOINT` | Optional. Defaults to `https://s3.<AWS_DEFAULT_REGION>.amazonaws.com`; set it for MinIO or another S3-compatible backend |
 
 ---
 
@@ -213,8 +217,13 @@ spec:
 # Notes
 
 - Compatible with RDS, self-hosted PostgreSQL, or Kubernetes services.
-- Works with AWS IAM roles or static credentials.
-- Uses server-side encryption (SSE-S3) by default.
+- Requires static credentials. IAM roles are no longer picked up: S3 is reached through
+  the MinIO client rather than the AWS CLI, which was dropped in v0.4.0 because its
+  Python dependencies carried the image's entire Critical/High vulnerability surface.
+- `S3_ENDPOINT` makes any S3-compatible backend work, not just AWS.
+- Uses server-side encryption (SSE-S3) by default. `S3_SSE` is now a switch rather than
+  an algorithm name; set it empty to disable. A backend with no KMS configured rejects
+  the upload instead of storing the object unencrypted.
 - Safe for production when used with correct database privileges.
 
 ---
