@@ -9,13 +9,14 @@
 FROM alpine:3.24
 
 RUN set -eux; \
-    apk add --no-cache \
+    apk add --no-cache --upgrade \
       postgresql-client \
       aws-cli \
       bash \
       ca-certificates \
       coreutils \
-      openssl; \
+      openssl \
+      zlib; \
     update-ca-certificates; \
     psql --version; \
     pg_dump --version; \
